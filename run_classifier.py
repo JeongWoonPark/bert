@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import pickle
 import collections
 import csv
 import os
@@ -204,6 +205,94 @@ class DataProcessor(object):
             return lines
 
 
+class NsmcProcessor(DataProcessor):
+    """Processor for the Naver Sentiment Movie Corpus data set."""
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            # Only the test set has a header
+            if set_type == "test" and i == 0:
+                continue
+            guid = "%s-%s" % (set_type, i)
+            if set_type == "test":
+                text_a = tokenization.convert_to_unicode(line[1])
+                label = "0"
+            else:
+                text_a = tokenization.convert_to_unicode(line[1])
+                label = tokenization.convert_to_unicode(line[2])
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+        return examples
+
+
+class PVoTProcessor(DataProcessor):
+    """Processor for the Naver Sentiment Movie Corpus data set."""
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "demo_train.txt")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "demo_train.txt")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "demo_train.txt")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        # return ["greeting", "appliance-on", "appliance-off", "pos", "neg", "etc", "cancel", "order", "date-at", "date-after",
+        #         "heat-state", "heat-cold", "heat-hot", "heat-on", "heat-off", "heat-up", "heat-down",
+        #         "heat-reservation-state", "heat-reservation-cancel", "heat-reservation-on-at", "heat-reservation-on-after", "heat-reservation-off-at", "heat-reservation-off-after",
+        #         "light-on", "light-off", "gas-on", "gas-off", "elevator-on", "parking-location", "security-on", "security-off",
+        #         "vent-state", "vent-on-high", "vent-on-mid", "vent-on-low", "vent-off", "vent-up", "vent-down"]
+        return ["greeting", "state", "check", "weather"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            # Only the test set has a header
+            # if set_type == "test" and i == 0:
+            #     continue
+            guid = "%s-%s" % (set_type, i)
+
+            # if set_type == "test":
+            #     text_a = tokenization.convert_to_unicode(line[0])
+            #     label = "etc"
+            # else:
+            text_a = tokenization.convert_to_unicode(line[0])
+            label = tokenization.convert_to_unicode(line[1])
+
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+        return examples
+
 class XnliProcessor(DataProcessor):
     """Processor for the XNLI data set."""
 
@@ -389,6 +478,8 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
     label_map = {}
     for (i, label) in enumerate(label_list):
         label_map[label] = i
+    with open(FLAGS.output_dir + "/label2id.pkl", 'wb') as w:
+        pickle.dump(label_map, w)
 
     tokens_a = tokenizer.tokenize(example.text_a)
     tokens_b = None
@@ -674,10 +765,12 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
 
+            logging_hook = tf.train.LoggingTensorHook({"loss": total_loss}, every_n_iter=10)  # check loss
             output_spec = tf.contrib.tpu.TPUEstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
+                training_hooks=[logging_hook],
                 scaffold_fn=scaffold_fn)
         elif mode == tf.estimator.ModeKeys.EVAL:
 
@@ -784,6 +877,8 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
 
     processors = {
+        "nsmc": NsmcProcessor,
+        "pvot": PVoTProcessor,
         "cola": ColaProcessor,
         "mnli": MnliProcessor,
         "mrpc": MrpcProcessor,
@@ -829,6 +924,7 @@ def main(_):
         cluster=tpu_cluster_resolver,
         master=FLAGS.master,
         model_dir=FLAGS.output_dir,
+        keep_checkpoint_max=1,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps,
         tpu_config=tf.contrib.tpu.TPUConfig(
             iterations_per_loop=FLAGS.iterations_per_loop,
@@ -956,19 +1052,57 @@ def main(_):
 
         result = estimator.predict(input_fn=predict_input_fn)
 
+        """=========================EXPORT MODEL========================"""
+
+        def serving_input_receiver_fn():
+            """An input receiver that expects a serialized tf.Example."""
+            reciever_tensors = {
+                "input_ids": tf.placeholder(dtype=tf.int64, shape=[1, FLAGS.max_seq_length])
+            }
+            features = {
+                "input_ids": reciever_tensors['input_ids'],
+                "input_mask": 1 - tf.cast(tf.equal(reciever_tensors['input_ids'], 0), dtype=tf.int64),
+                "segment_ids": tf.zeros(dtype=tf.int64, shape=[1, FLAGS.max_seq_length]),
+                'label_ids': tf.zeros(dtype=tf.int64, shape=[1, 1])
+            }
+            return tf.estimator.export.ServingInputReceiver(features, reciever_tensors)
+
+        estimator._export_to_tpu = False
+        estimator.export_savedmodel(os.path.join(FLAGS.output_dir, "export_model"), serving_input_receiver_fn)
+        """=========================EXPORT MODEL========================"""
+
+        with open(FLAGS.output_dir + '/label2id.pkl', 'rb') as rf:
+            label2id = pickle.load(rf)
+            id2label = {value: key for key, value in label2id.items()}
+
         output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
         with tf.gfile.GFile(output_predict_file, "w") as writer:
             num_written_lines = 0
             tf.logging.info("***** Predict results *****")
             for (i, prediction) in enumerate(result):
-                probabilities = prediction["probabilities"]
+                probabilities = prediction["probabilities"].tolist()
                 if i >= num_actual_predict_examples:
                     break
-                output_line = "\t".join(
-                    str(class_probability)
-                    for class_probability in probabilities) + "\n"
+
+                text = predict_examples[i].text_a
+                intent_answer = predict_examples[i].label
+                intent_predict = id2label[probabilities.index(max(probabilities))]
+
+                if intent_answer == intent_predict:
+                    num_written_lines += 1
+                    continue
+
+                # output_line = "\t".join(
+                #     str(class_probability)
+                #     for class_probability in probabilities) + "\n"
+
+                output_line = text + "\t" + intent_answer + "\t" + intent_predict + "\n"
+
                 writer.write(output_line)
                 num_written_lines += 1
+
+            writer.write("[END]")
+
         assert num_written_lines == num_actual_predict_examples
 
 
