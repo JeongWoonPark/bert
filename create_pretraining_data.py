@@ -442,6 +442,7 @@ def main(_):
     input_files = []
     for input_pattern in FLAGS.input_file.split(","):
         input_files.extend(tf.gfile.Glob(input_pattern))
+        # input_files.extend(tf.gfile.Glob(os.path.join(input_pattern, "*")))  # 해당 폴더의 모든 파일 수집
 
     tf.logging.info("*** Reading from input files ***")
     for input_file in input_files:
