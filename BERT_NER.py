@@ -213,44 +213,35 @@ class DataProcessor(object):
 class NerProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
         return self._create_example(
-            # self._read_data(os.path.join(data_dir, "train.txt")), "train"
-            self._read_data(os.path.join(data_dir, "PVoT_IER_train_data_shuffle_v6.1.txt")), "train"
-        )
+            self._read_data(os.path.join(data_dir, "train.txt")), "train")
 
     def get_dev_examples(self, data_dir):
         return self._create_example(
-            self._read_data(os.path.join(data_dir, "PVoT_IER_dev_data_shuffle_v6.1.txt")), "dev"
-        )
+            self._read_data(os.path.join(data_dir, "dev.txt")), "dev")
 
     def get_test_examples(self, data_dir):
         return self._create_example(
-            self._read_data(os.path.join(data_dir, "PVoT_IER_test_data_shuffle_v6.1.txt")), "test"
-        )
+            self._read_data(os.path.join(data_dir, "test.txt")), "test")
 
-    def get_labels(self):
+    def get_labels(self, data_dir):
         """
         here "X" used to represent "##eer","##soo" and so on!
         "[PAD]" for padding
         :return:
         """
         # ex) return ["[PAD]","B-MISC", "I-MISC", "O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "X","[CLS]","[SEP]"]
-        # tip) "[PAD]" tag는 보기 쉽게 index 0에 고정 / "X" tag는 사용안함, "I-" tag로 대체  / [SEP]는 사용 안하지만 tfrecord에 있으므로 포함해야함
-        # return ["[PAD]", "O", "B-LOC", "I-LOC", "B-TEMP", "I-TEMP", "B-TIME_MOMENT", "I-TIME_MOMENT",
-        #         "B-TIME_HOUR", "I-TIME_HOUR", "B-TIME_MINUTE", "I-TIME_MINUTE",
-        #         "B-NUM", "I-NUM", "B-ORDER", "I-ORDER", "[CLS]", "[SEP]"]
-        return ["[PAD]", "O", "B-elevator-on", "I-elevator-on", "B-gas-off", "I-gas-off", "B-gas-on", "I-gas-on",
-                "B-greeting", "I-greeting",
-                "B-heat-state", "I-heat-state", "B-heat-up", "I-heat-up", "B-heat-down", "I-heat-down", "B-heat-on",
-                "I-heat-on", "B-heat-off", "I-heat-off", "B-heat-hot", "I-heat-hot", "B-heat-cold", "I-heat-cold",
-                "B-heat-reservation-state", "I-heat-reservation-state", "B-heat-reservation-cancel",
-                "I-heat-reservation-cancel", "B-heat-reservation-on-at", "I-heat-reservation-on-at",
-                "B-heat-reservation-on-after", "I-heat-reservation-on-after", "B-heat-reservation-off-at",
-                "I-heat-reservation-off-at", "B-heat-reservation-off-after", "I-heat-reservation-off-after",
-                "B-light-on", "I-light-on", "B-light-off", "I-light-off", "B-parking-location", "I-parking-location",
-                "B-security-on", "I-security-on", "B-security-off", "I-security-off",
-                "B-vent-down", "I-vent-down", "B-vent-off", "I-vent-off", "B-vent-on-high", "I-vent-on-high",
-                "B-vent-on-low", "I-vent-on-low", "B-vent-on-mid", "I-vent-on-mid", "B-vent-state", "I-vent-state",
-                "B-vent-up", "I-vent-up", "[CLS]", "[SEP]"]
+
+        # Custom)
+        # "[PAD]"는 보기 쉽게 index 0에 고정
+        # "X"는 모두 "I-"로 대체
+        # "[SEP]"는 사용하진 않지만 tfrecord에 있으므로 포함해야함
+        lines = self._read_data(os.path.join(data_dir, "train.txt"))
+        label_lines = [line[0] for line in lines]
+        labels = [label for labels in label_lines for label in labels.split()]
+        labels = sorted(set(labels))
+        labels = [pair for label in labels if label != "O" for pair in [label, "I"+label[1:]]]
+        labels = ["[PAD]", "O"] + labels + ["[CLS]", "[SEP]"]
+        return labels
 
     def _create_example(self, lines, set_type):
         examples = []
@@ -281,8 +272,6 @@ def convert_single_example(ex_index, example, label_list, max_seq_length, tokeni
     # here start with zero this means that "[PAD]" is zero
     for (i, label) in enumerate(label_list):
         label_map[label] = i
-    with open(FLAGS.output_dir + "/label2id.pkl", 'wb') as w:
-        pickle.dump(label_map, w)
 
     textlist = example.text.split(' ')
     labellist = example.label.split(' ')
@@ -628,7 +617,11 @@ def main(_):
         raise ValueError("Task not found: %s" % (task_name))
     processor = processors[task_name]()
 
-    label_list = processor.get_labels()
+    label_list = processor.get_labels(FLAGS.data_dir)
+    with open(FLAGS.output_dir + "/label2id.txt", "w", encoding="utf-8") as f:
+        f.write("\n".join(label_list))
+    with open(FLAGS.output_dir + "/label2id.pkl", 'wb') as f:
+        pickle.dump(dict((label, idx) for idx, label in enumerate(label_list)), f)
 
     tokenizer = tokenization.FullTokenizer(
         vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
