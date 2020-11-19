@@ -247,31 +247,28 @@ class NsmcProcessor(DataProcessor):
 
 
 class PVoTProcessor(DataProcessor):
-    """Processor for the Naver Sentiment Movie Corpus data set."""
+    """PowerVoice Custom Process"""
 
     def get_train_examples(self, data_dir):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "demo_train.txt")), "train")
+            self._read_tsv(os.path.join(data_dir, "train.txt")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "demo_train.txt")), "dev")
+            self._read_tsv(os.path.join(data_dir, "dev.txt")), "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "demo_train.txt")), "test")
+            self._read_tsv(os.path.join(data_dir, "test.txt")), "test")
 
-    def get_labels(self):
+    def get_labels(self, data_dir):
         """See base class."""
-        # return ["greeting", "appliance-on", "appliance-off", "pos", "neg", "etc", "cancel", "order", "date-at", "date-after",
-        #         "heat-state", "heat-cold", "heat-hot", "heat-on", "heat-off", "heat-up", "heat-down",
-        #         "heat-reservation-state", "heat-reservation-cancel", "heat-reservation-on-at", "heat-reservation-on-after", "heat-reservation-off-at", "heat-reservation-off-after",
-        #         "light-on", "light-off", "gas-on", "gas-off", "elevator-on", "parking-location", "security-on", "security-off",
-        #         "vent-state", "vent-on-high", "vent-on-mid", "vent-on-low", "vent-off", "vent-up", "vent-down"]
-        return ["greeting", "state", "check", "weather"]
+        lines = self._read_tsv(os.path.join(data_dir, "train.txt"))
+        labels = [tokenization.convert_to_unicode(line[1]) for line in lines]
+        return sorted(set(labels))
 
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
@@ -478,8 +475,6 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
     label_map = {}
     for (i, label) in enumerate(label_list):
         label_map[label] = i
-    with open(FLAGS.output_dir + "/label2id.pkl", 'wb') as w:
-        pickle.dump(label_map, w)
 
     tokens_a = tokenizer.tokenize(example.text_a)
     tokens_b = None
@@ -909,7 +904,12 @@ def main(_):
 
     processor = processors[task_name]()
 
-    label_list = processor.get_labels()
+    label_list = processor.get_labels(FLAGS.data_dir)
+    with open(FLAGS.output_dir + "/label2id.txt", "w", encoding="utf-8") as f:
+        f.write("\n".join(label_list))
+    with open(FLAGS.output_dir + "/label2id.pkl", 'wb') as f:
+        pickle.dump(dict((label, idx) for idx, label in enumerate(label_list)), f)
+
 
     tokenizer = tokenization.FullTokenizer(
         vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
@@ -1071,8 +1071,8 @@ def main(_):
         estimator.export_savedmodel(os.path.join(FLAGS.output_dir, "export_model"), serving_input_receiver_fn)
         """=========================EXPORT MODEL========================"""
 
-        with open(FLAGS.output_dir + '/label2id.pkl', 'rb') as rf:
-            label2id = pickle.load(rf)
+        with open(FLAGS.output_dir + '/label2id.pkl', 'rb') as f:
+            label2id = pickle.load(f)
             id2label = {value: key for key, value in label2id.items()}
 
         output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
