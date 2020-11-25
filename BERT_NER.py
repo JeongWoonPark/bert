@@ -236,10 +236,10 @@ class NerProcessor(DataProcessor):
         # "X"는 모두 "I-"로 대체
         # "[SEP]"는 사용하진 않지만 tfrecord에 있으므로 포함해야함
         lines = self._read_data(os.path.join(data_dir, "train.txt"))
-        label_lines = [line[0] for line in lines]
-        labels = [label for labels in label_lines for label in labels.split()]
+        labels = [label for line in lines for label in line[0].split()]
+        labels = [label for label in labels if label.startswith("B")]
         labels = sorted(set(labels))
-        labels = [pair for label in labels if label != "O" for pair in [label, "I"+label[1:]]]
+        labels = [pair for label in labels for pair in [label, "I"+label[1:]]]
         labels = ["[PAD]", "O"] + labels + ["[CLS]", "[SEP]"]
         return labels
 
