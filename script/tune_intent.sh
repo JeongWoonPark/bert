@@ -1,8 +1,8 @@
 #!/bin/bash
 
-DATA_PATH="../data/finetuning_data/PVoT/intent"
-MODEL_PATH="../storage/model/BERT_SP_Whole_100m_lr25"
-OUTPUT_PATH="finetuning_models/pvot_intent/v${1}_2e_25lr"
+DATA_PATH="../../data/finetuning_data/PVoT/intent"
+MODEL_PATH="../../../storage/model/BERT_SP_Whole_100m_lr25"
+OUTPUT_PATH="../../BERT_finetuningmodels/pvot_intent/v${1}_2e_25lr"
 
 #mpirun -np 2 \
 #    -H localhost:2 \

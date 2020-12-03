@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-DATA_PATH="../data/finetuning_data/PVoT/multi-intent"
-MODEL_PATH="../storage/model/BERT_SP_Whole_100m_lr25"
-OUTPUT_PATH="finetuning_models/pvot_multi-intent/v${1}_1e_25lr"
+DATA_PATH="../../data/finetuning_data/PVoT/multi-intent"
+MODEL_PATH="../../../storage/model/BERT_SP_Whole_100m_lr25"
+OUTPUT_PATH="../../BERT_finetuningmodels/pvot_multi-intent/v${1}_1e_25lr"
 
   CUDA_VISIBLE_DEVICES=1 python src/BERT_NER.py\
     --task_name=ner \
