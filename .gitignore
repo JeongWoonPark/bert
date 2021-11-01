@@ -117,3 +117,5 @@ dmypy.json
 
 # Custom
 .idea
+output
+*.txt

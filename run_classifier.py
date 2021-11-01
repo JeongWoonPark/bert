@@ -58,7 +58,7 @@ flags.DEFINE_string(
     "Initial checkpoint (usually from a pre-trained BERT model).")
 
 flags.DEFINE_bool(
-    "do_lower_case", True,
+    "do_lower_case", False,
     "Whether to lower case the input text. Should be True for uncased "
     "models and False for cased models.")
 
@@ -223,7 +223,7 @@ class NsmcProcessor(DataProcessor):
         return self._create_examples(
             self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
 
-    def get_labels(self):
+    def get_labels(self, data_dir):
         """See base class."""
         return ["0", "1"]
 
@@ -241,8 +241,7 @@ class NsmcProcessor(DataProcessor):
             else:
                 text_a = tokenization.convert_to_unicode(line[1])
                 label = tokenization.convert_to_unicode(line[2])
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
 
 
@@ -289,6 +288,7 @@ class PVoTProcessor(DataProcessor):
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
+
 
 class XnliProcessor(DataProcessor):
     """Processor for the XNLI data set."""

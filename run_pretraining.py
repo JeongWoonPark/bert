@@ -415,7 +415,10 @@ def main(_):
 
     input_files = []
     for input_pattern in FLAGS.input_file.split(","):
+        # 특정 한 개의 tfrecord
         input_files.extend(tf.gfile.Glob(input_pattern))
+        # tfrecord가 들어있는 폴더 설정 (Shard)
+        input_files.extend(tf.gfile.Glob(os.path.join(input_pattern, "*")))
 
     tf.logging.info("*** Input Files ***")
     for input_file in input_files:
